@@ -1,0 +1,20 @@
+# Python:
+*.py[cod]
+*.so
+*.egg
+*.egg-info
+                                                                                                                            
+# Data:
+*.csv
+*.log
+*.7z
+*.pkl
+*.txt
+
+.idea
+.ipynb_checkpoints
+/data
+/data_dev
+/data_official
+/data_supervised
+/model
