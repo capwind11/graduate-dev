@@ -4,7 +4,7 @@ import time
 import pickle
 import gc
 from tqdm import tqdm
-from utils import *
+from drain.utils import *
 
 # 日志聚类
 class LogCluster:
@@ -40,7 +40,7 @@ class Drain:
     treeStoragePath: save path of prefix tree of Drain
     """
 
-    def __init__(self,depth=4, st=0.4, maxChild=100, rex=None, removeCol=[] ,treeStoragePath=None):
+    def __init__(self,depth=4, st=0.6, maxChild=100, rex=None, removeCol=[] ,treeStoragePath=None):
         self.depth = depth
         self.st = st
         self.removeCol = removeCol
@@ -67,6 +67,8 @@ class Drain:
     def save(self, treeStorageFile='prefixTree.pkl', savePath='./results/', saveFileName='template',
              saveTempFileName='logTemplates.txt'):
 
+        if not os.path.exists(savePath):
+            os.makedirs(savePath)
         f = open(savePath + treeStorageFile, 'wb')
         pickle.dump(self.prefixTree, f)
 
@@ -152,8 +154,8 @@ class Drain:
                         matchCluster.logTemplate = newTemplate
                 f.write(str(logID) + "," + " ".join(blkId_list) + "," + str(matchCluster.eventId) + '\n')
                 count += 1
-                # if count > 200000:
-                #     break
+                if count > 2000000:
+                    break
         f.close()
         t2 = time.time()
         print('build the prefix tree process takes', t2 - t1)

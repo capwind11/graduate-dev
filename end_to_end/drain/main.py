@@ -84,7 +84,7 @@ if __name__ == "__main__":
     # draw_tree()
     drain = parse_log_data()
     drain.save()
-    # preprocess = Preprocess('./results/','./data/', "log_item_to_label.csv", 'data_instances_hdfs.csv', 'anomaly_label.csv', 'normal.csv', 'abnormaly.csv')
+    # preprocess = Preprocess('./results/','./data/', "log_item_to_label.csv", 'data_instances_hdfs.csv', 'anormaly_label.csv', 'normal.csv', 'abnormaly.csv')
     # blockId_to_logs = preprocess.partition_by_file()
     # data_df = pd.read_csv("./results/data_instances_hdfs.csv", index_col=0,engine='c', na_filter=False, memory_map=True)
     # preprocess.map_log_seq_to_label(data_df)
