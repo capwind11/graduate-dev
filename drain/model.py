@@ -128,9 +128,7 @@ class Drain:
 
                 logmessageL = line.strip().split()
                 logID = count
-                # TODO 还是要通过传参方式来实现
                 logmessageL = [word for i, word in enumerate(logmessageL) if i not in self.removeCol]
-                # logmessageL = num2word(logmessageL)
                 cookedLine = ' '.join(logmessageL)
 
                 blkId_list = list(set(re.findall(r'(blk_-?\d+)', cookedLine)))
@@ -158,7 +156,7 @@ class Drain:
                         matchCluster.logTemplate = newTemplate
                 f.write(str(logID) + "," + " ".join(blkId_list) + "," + str(matchCluster.eventId) + '\n')
                 count += 1
-                if count > 20000:
+                if count > 2000:
                     break
         f.close()
         t2 = time.time()
@@ -307,6 +305,7 @@ class Drain:
 
             currentDepth += 1
         if self.depth >= seqLen:
+            logClust.parentNode.append(parentn)
             if len(parentn.children) == 0:
                 parentn.children = [logClust]
             else:
@@ -354,7 +353,7 @@ def buildSampleDrain(fileName = None):
     rex = ['blk_(|-)[0-9]+']
     myParser = Drain(rex=rex)
     if fileName!=None:
-        myParser.fit(fileName)
+        myParser.fit(fileName,isReconstruct=True)
     else:
         myParser.fit()
     # myParser = Drain(treeStoragePath='./results/prefixTree.pkl', rex=rex)

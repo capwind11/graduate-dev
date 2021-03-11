@@ -22,7 +22,7 @@ def SeqDist(seq1, seq2):
         if token1 == token2:
             simTokens += 1
 
-    retVal = float(simTokens) / len(seq1)
+    retVal = 2*float(simTokens) / (len(seq1)+len(seq2))
     return retVal, numOfPar
 
 
@@ -63,8 +63,8 @@ def getTemplate(seq1, seq2):
 包含数字
 '''
 def hasNumbers(s):
-    # return any(char.isdigit() for char in s)
-    return False
+    return any(char.isdigit() for char in s)
+    # return False
 
 
 def compareSimilarity(node1,node2):

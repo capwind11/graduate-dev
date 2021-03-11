@@ -35,27 +35,6 @@ class Trie:
             self.root = root
         self.maxDepth = maxDepth
 
-    # 在前缀解析树上添加一个序列
-    def addSeq(self, wordList):
-        # get root of trie
-        current = self.root
-        subWordList = wordList[:self.maxDepth]
-        for w in subWordList:
-            w = "\n".join(textwrap.wrap(w, width=5, expand_tabs=True,
-                          replace_whitespace=False,
-                          break_long_words=True))
-            # create a child, count + 1
-            tokenNode = current.children.get(w)
-            if tokenNode == None:
-                current.children[w] = Node()
-            current = current.children[w]
-            current.token = w
-        template = " ".join(wordList)
-        template = "\n".join(textwrap.wrap(template, width=25, expand_tabs=True,
-                                    replace_whitespace=False,
-                                    break_long_words=True))
-        current.children[template] = Node()
-        current.children[template].token = template
 
 def getNumLeafs(n):
     numLeafs = 0
@@ -115,7 +94,8 @@ def plotTree(myTree, parentPt, nodeTxt):
     plotTree.yOff = plotTree.yOff + 1.0 / plotTree.totalD
 
 
-def createPlot(inTree):
+def createPlot(drain):
+    inTree = drain.copy()
     fig = plt.figure(1, facecolor='white')
     fig.clf()
     axprops = dict(xticks=[], yticks=[])

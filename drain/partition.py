@@ -55,9 +55,9 @@ class Preprocess:
         data_df['Label'] = data_df['BlockId'].apply(lambda x: 1 if label_dict[x] == 'Anomaly' else 0)
         data_df['EventSequence'] = data_df['EventSequence'].apply(lambda x: list(map(int,x[1:-1].split(','))))
         # normal_output
-        anormal_data = data_df.iloc[(data_df['Label'] == 1).tolist()]['EventSequence']
+        anormal_data = data_df.iloc[(data_df['Label'] == 1).tolist()][['BlockId','EventSequence']]
         anormal_data.to_csv(self.abnormal_output,index=False)
-        normal_data = data_df.iloc[(data_df['Label'] == 0).tolist()]['EventSequence']
+        normal_data = data_df.iloc[(data_df['Label'] == 0).tolist()][['BlockId','EventSequence']]
         # nomaly_data['EventSequence'] = nomaly_data['EventSequence'].apply(lambda x: ' '.join(x))
         normal_data.to_csv(self.normal_output,index=False)
         data_df.to_csv('data_instances.csv',index=False)

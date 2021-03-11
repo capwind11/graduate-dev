@@ -1,18 +1,21 @@
 from utils import *
 from model import Node,Drain,buildSampleDrain,LogCluster
+import pandas as pd
 # 方法1： 合并子树节点
 
 class Optimizer:
 
-    def modify(self,method='merge_sub_tree',drain=None,tree=None,st = 0.8):
-
+    def modify(self,resultFile = '.\\data\\log_item_to_label.csv',method='merge_sub_tree',drain=None,tree=None,st = 0.8):
+        self.resultFile = resultFile
         self.st = st
         self.method = method
+        self.drain = drain
+        self.tree = tree
+        self.depth = drain.depth
         if method == 'merge_sub_tree':
-            self.depth = drain.depth
-            return self.modify_by_merge_subtree(tree)
+            self.modify_by_merge_subtree(self.tree)
         elif method == 'seq_dist' or method == 'tfidf':
-            self.modify_by_merge_leaf(drain)
+            self.modify_by_merge_leaf()
 
     '''
     用递归的方式合并子树
@@ -28,7 +31,6 @@ class Optimizer:
             return res
         nodeDict = {}
         for node in nodeList:
-            # if :
             for token in node.children.keys():
                 child = node.children[token]
                 if child.token not in nodeDict:
@@ -40,20 +42,19 @@ class Optimizer:
         return res
 
     def combineLeaves(self, nodeList):
-        res = []
-        ans = LogCluster()
-        prefix = nodeList[0].logTemplate[:self.depth]
+
+        depth = nodeList[0].parentNode[0].depth
+        prefix = nodeList[0].logTemplate[:depth]
         for node in nodeList[1:]:
-            prefix = getTemplate(prefix, node.logTemplate[:self.depth])
+            prefix = getTemplate(prefix, node.logTemplate[:depth])
         for node in nodeList[0:]:
-            node.logTemplate = prefix+node.logTemplate[self.depth:]
+            node.logTemplate = prefix+node.logTemplate[depth:]
         groups = self.groupCluster(nodeList)
+        item_to_class = pd.read_csv(self.resultFile, engine='c', na_filter=False, memory_map=True)
         for group in groups:
-            cluster = group[0]
-            for cluster1 in group[1:]:
-                cluster.logIDL.extend(cluster1.logIDL)
-            res.append(cluster)
-        return res
+
+            self.mergeCluster(group,item_to_class)
+        item_to_class.to_csv(self.resultFile,index=False)
 
     '''
     合并相似的节点
@@ -62,12 +63,12 @@ class Optimizer:
         res = []
         isWordGrouped = {node.token: False for node in nodeList}
         # # print(isWordGrouped)
-        if isinstance(nodeList[0].children,list):
-            for node in nodeList:
-                res.append([node])
-            return res
+
         for i in range(len(nodeList)):
             node = nodeList[i]
+            if isinstance(node.children, list):
+                res.append([node])
+                continue
             if isWordGrouped[node.token]:
                 continue
             newGroup = [node]
@@ -76,7 +77,7 @@ class Optimizer:
                 newMember = []
                 for member in newGroup:
                     # print(member.token, node1.token)
-                    if compareSimilarity(member, node1) > 0.75:
+                    if not isinstance(node1.children, list) and compareSimilarity(member, node1) > 0.75:
                         newMember.append(node1)
                         isWordGrouped[node1.token] = True
                         break
@@ -89,7 +90,7 @@ class Optimizer:
         if len(childs) == 0:
             return node
         if isinstance(childs,list):
-            node.children = self.combineLeaves(childs)
+            self.combineLeaves(childs)
             return node
         nodeGroups = self.groupNodes(list(childs.values()))
         node.children.clear()
@@ -107,10 +108,14 @@ class Optimizer:
     '''
     合并相似的类
     '''
-    def mergeCluster(self,clusterList):
+    def mergeCluster(self,clusterList,item_to_class):
         res = clusterList[0]
-        for cluster in clusterList[1:]:
+        drainClusters = self.drain.logClusters
 
+        for cluster in clusterList[1:]:
+            drainClusters.remove(cluster)
+        for cluster in clusterList[1:]:
+            item_to_class['EventId'] = item_to_class['EventId'].replace(cluster.eventId, res.eventId)
             parentNodes = cluster.parentNode
             for parentNode in parentNodes:
                 parentNode.children.remove(cluster)
@@ -150,11 +155,10 @@ class Optimizer:
             res.append(newGroup)
         return res
 
-    def modify_by_merge_leaf(self,drain):
-        clusterList = drain.logClusters
+    def modify_by_merge_leaf(self):
+        clusterList = self.drain.logClusters
         clustersOfDiffGroup = self.groupCluster(clusterList)
+        item_to_class = pd.read_csv(self.resultFile, engine='c', na_filter=False, memory_map=True)
         for clusters in clustersOfDiffGroup:
-            for cluster in clusters[1:]:
-                clusterList.remove(cluster)
-            self.mergeCluster(clusters)
-
+            self.mergeCluster(clusters,item_to_class)
+        item_to_class.to_csv(self.resultFile,index=False)
