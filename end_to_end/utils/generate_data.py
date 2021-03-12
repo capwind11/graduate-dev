@@ -1,6 +1,7 @@
 import pandas as pd
 import torch
 import time
+from sklearn.model_selection import train_test_split
 from torch.utils.data import TensorDataset, DataLoader,random_split
 from tqdm import tqdm
 from ast import literal_eval
@@ -75,3 +76,51 @@ def generate_test_data(name,window_size=10):
     print('Number of seqs({}): {}'.format(name, len(seqs)))
     dataset = TensorDataset(torch.tensor(seqs, dtype=torch.float), torch.tensor(labels))
     return session_to_seq, dataset, seqs,labels
+
+def generate_bert_data(file_dir,bert_cache_path):
+    eventId_to_bert = torch.load(bert_cache_path)
+    padding = torch.zeros_like(eventId_to_bert[5][1][0])
+    eventId_to_bert[0] = [[], [padding]]
+    sessions = []
+    labels = []
+    max_len = 50
+    normal_data = set()
+    abnormal_data = set()
+    data = pd.read_csv('data/lstm/dataset/train.csv', engine='c', na_filter=False, memory_map=True)
+    blockId_list = data['BlockId'].tolist()
+    seqs = data['EventSequence'].apply(literal_eval).tolist()
+    for line in tqdm(seqs, "loading data"):
+        if len(line) > 50:
+            continue
+        normal_data.add(tuple(line))
+    data = pd.read_csv('data/lstm/dataset/abnormal.csv', engine='c', na_filter=False, memory_map=True)
+    blockId_list = data['BlockId'].tolist()
+    seqs = data['EventSequence'].apply(literal_eval).tolist()
+    for line in tqdm(seqs, "loading data"):
+        if len(line) > 50:
+            continue
+        abnormal_data.add(tuple(line))
+    for line in tqdm(normal_data, "normal:"):
+        line = list(line) + [0] * (max_len - len(line))
+        bert_input = []
+        for id in line:
+            bert_input.append(eventId_to_bert[id][1][0].cpu().numpy())
+        sessions.append(tuple(bert_input))
+        labels.append(0)
+    for line in tqdm(abnormal_data, "abnormal:"):
+        line = list(line) + [0] * (max_len - len(line))
+        bert_input = []
+        for id in line:
+            bert_input.append(eventId_to_bert[id][1][0].cpu().numpy())
+        sessions.append(tuple(bert_input))
+        labels.append(1)
+
+    print('Number of sessions({}): {}'.format(file_dir, len(sessions)))
+    print('Number of normal sessions: {}'.format(len(normal_data)))
+    print('Number of abnormal sessions: {}'.format(len(abnormal_data)))
+    train_x, test_x, train_y, test_y = train_test_split(sessions, labels, test_size=0.3)
+    train_data = TensorDataset(torch.tensor(train_x, dtype=torch.float), torch.tensor(train_y))
+    # train_data = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+    test_data = TensorDataset(torch.tensor(test_x, dtype=torch.float), torch.tensor(test_y))
+    # test_data = DataLoader(test_data, batch_size=batch_size)
+    return train_data, test_data, train_x, test_x, train_y, test_y
