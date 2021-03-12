@@ -154,8 +154,8 @@ class Drain:
                         matchCluster.logTemplate = newTemplate
                 f.write(str(logID) + "," + " ".join(blkId_list) + "," + str(matchCluster.eventId) + '\n')
                 count += 1
-                if count > 2000000:
-                    break
+                # if count > 2000000:
+                #     break
         f.close()
         t2 = time.time()
         print('build the prefix tree process takes', t2 - t1)

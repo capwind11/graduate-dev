@@ -22,7 +22,8 @@ def SeqDist(seq1, seq2):
         if token1 == token2:
             simTokens += 1
 
-    retVal = 2*float(simTokens) / (len(seq1)+len(seq2))
+    # retVal = 2*float(simTokens) / (len(seq1)+len(seq2))
+    retVal = float(simTokens) / len(seq1)
     return retVal, numOfPar
 
 

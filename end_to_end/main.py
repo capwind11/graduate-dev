@@ -8,11 +8,12 @@ from lstm.predictor import fast_predict
 from torch import nn,optim
 from torch.utils.data import  DataLoader
 import pandas as pd
+from lstm.wf_constructor import workflow_constructor
 import os
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 num_classes = 32
-batch_size = 5
+batch_size = 1024
 input_size = 1
 window_size = 10
 num_layers = 2
@@ -63,7 +64,7 @@ def parse_log():
 
     rex = ['blk_(|-)[0-9]+', '(/|)([0-9]+\.){3}[0-9]+(:[0-9]+|)(:|)']
     removeCol = [0,1,2]
-    myParser = Drain(rex=rex,removeCol=removeCol,st=0.4)
+    myParser = Drain(rex=rex,removeCol=removeCol,st=0.5)
     myParser.fit(isReconstruct=True,inputFile=logPath,outputFile=parsed_result)
 
     myParser.save(savePath=cluster_result)
@@ -81,8 +82,10 @@ def partition():
 
 if __name__=='__main__':
 
-    parse_log()
+    # parse_log()
+    # exit(0)
     partition()
+    exit(0)
 
     model_dir = 'model'
     version = 'v0.1'
@@ -94,11 +97,11 @@ if __name__=='__main__':
     if os.path.exists(model_dir + '/' + model_name + '.pt'):
         model.load_state_dict(torch.load(model_dir + '/' + model_name + '.pt'))
 
-    model.train()
-    train_dataset = generate_train_data(lstm_dataset + 'train.csv')
-    dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
-
-    train(model, dataloader, criterion, optimizer, current_epoch=0, num_epochs=50)
+    # model.train()
+    # train_dataset = generate_train_data(lstm_dataset + 'train.csv')
+    # dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
+    #
+    # train(model, dataloader, criterion, optimizer, current_epoch=0, num_epochs=100)
 
     if not os.path.isdir(model_dir):
         os.makedirs(model_dir)
@@ -116,7 +119,4 @@ if __name__=='__main__':
 
     test_normal_result, test_abnormal_result = fast_predict(model, normal_dataloader, abnormal_dataloader,
                                                             test_normal_session, test_abnormal_session,
-                                                            10, window_size)
-
-
-
+                                                            10, window_size,ts=0.01)

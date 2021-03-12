@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 import random
 import itertools
+import os
+import networkx as nx
+import matplotlib.pyplot as plt
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -22,52 +25,56 @@ class Model(nn.Module):
 
 
 class workflow_constructor:
-    def __init__(self,model,input_size=1):
+    def __init__(self, model, input_size=1, ts=0.005, num_candidates=10):
 
         self.softmax = nn.Softmax(dim=0)
         self.model = model
         self.input_size = input_size
+        self.visited = set()
+        self.graph = dict()
+        self.ts = ts
+        self.num_candidates = 10
 
-    def permutation(self,event_list):
+    def permutation(self, event_list):
         return [list(event) for event in (itertools.permutations(event_list))]
 
-    def generate_seq(self,start, window_size=10, num_candidates=5, scope=None):
+    def generate_seq(self, start, window_size=10, scope=None):
         if isinstance(start, list):
             start = torch.FloatTensor(start).reshape(1, -1)
         bg = start.size(1)
         if scope == None:
-            scope = num_candidates
+            scope = self.num_candidates
         for i in range(bg, bg + window_size):
-            seq = start.clone().detach().view(-1, i, input_size).to(device)
-            output = model(seq).cpu()[:, -1, :]
+            seq = start.clone().detach().view(-1, i, self.input_size).to(device)
+            output = self.model(seq).cpu()[:, -1, :]
             output = output.reshape(-1)
-            predicted = torch.argsort(output)[-num_candidates:]
+            predicted = torch.argsort(output)[-self.num_candidates:]
             nxt = random.randint(1, scope)
             start = torch.cat([start, predicted[-nxt].reshape(1, -1).float()], 1)
         return start, predicted, output
 
-    def predict_next_event(self,seq, num_candidates, ts):
-        _, predicted, output = self.generate_seq(seq, 1, num_candidates)
+    def predict_next_event(self, seq):
+        _, predicted, output = self.generate_seq(seq, 1)
         prob = self.softmax(output)
         scope = 0
-        for i in range(num_candidates):
-            if prob[predicted[num_candidates - i - 1]] < ts:
-                scope = num_candidates - i - 1
+        for i in range(self.num_candidates):
+            if prob[predicted[self.num_candidates - i - 1]] < self.ts:
+                scope = self.num_candidates - i - 1
                 break
         return predicted[scope + 1:].cpu().numpy().tolist()
 
-    def next_possible_event(self,seq, num_candidates=10, ts=0.005, out_of_order=False, bg=0, ed=-1):
+    def next_possible_event(self, seq, out_of_order=False, bg=0, ed=-1):
         res = []
         if not out_of_order:
-            res.extend(self.predict_next_event(seq, num_candidates, ts))
+            res.extend(self.predict_next_event(seq))
         else:
             seq_list = self.permutation(seq[bg:ed])
             for s in seq_list:
-                res.extend(self.predict_next_event(s + seq[ed:], num_candidates, ts))
+                res.extend(self.predict_next_event(s + seq[ed:]))
             res = list(set(res))
         return res
 
-    def is_connected(self,e1, e2, eventmap):
+    def is_connected(self, e1, e2, eventmap):
         eventList = list(eventmap.keys())
         visited = {i: False for i in eventList}
         que = []
@@ -82,7 +89,7 @@ class workflow_constructor:
                     que.append(e)
         return False
 
-    def recognize_branch(self,next_event):
+    def recognize_branch(self, next_event):
         concurrent_group = []
         if 30 in next_event:
             next_event.remove(30)
@@ -101,7 +108,7 @@ class workflow_constructor:
         #                 print(concurrent_group,i,j+i+1)
         return concurrent_group
 
-    def recognize_loop(self,seq, concurrent_event):
+    def recognize_loop(self, seq, concurrent_event):
 
         next_event = self.next_possible_event(seq)
         for event in next_event:
@@ -110,7 +117,7 @@ class workflow_constructor:
                     return seq[seq.index(event):]
         return []
 
-    def find_loop(self,seq):
+    def find_loop(self, seq):
 
         loop_len = len(seq)
         loop_seq = [event for event in seq]
@@ -120,54 +127,106 @@ class workflow_constructor:
             loop_seq.append(loop_seq[i])
         return True
 
+    def add_line(self, begin, end, concurrent):
+        if concurrent:
+            begin = 'merge({})'.format(','.join(list(map(str, sorted(begin)))))
+        else:
+            begin = str(begin[-1])
+        if begin not in self.graph:
+            self.graph[begin] = set()
+        if len(end) > 1:
+            end_mark = ','.join(list(map(str, sorted(end))))
+            self.graph[begin].add('diverge({})'.format(end_mark))
+            if 'diverge({})'.format(end_mark) not in self.graph:
+                self.graph['diverge({})'.format(end_mark)] = set()
+            for event in end:
+                self.graph['diverge({})'.format(end_mark)].add(str(event))
+                if str(event) not in self.graph:
+                    self.graph[str(event)] = set()
+                self.graph[str(event)].add('merge({})'.format(end_mark))
+        else:
+            self.graph[begin].add(str(end[0]))
 
-    def workflow_construction(self,seq=[0], end={30}, concurrent=False):
+    def workflow_construction(self, seq=[0], end={30}, visited=None, concurrent=False):
         next_event = self.next_possible_event(seq, out_of_order=concurrent, ed=len(seq))
-        for event in seq:
-            if event in next_event:
+        if visited == None:
+            visited = set()
+        for event in next_event[::-1]:
+            if event in seq or event in visited:
                 next_event.remove(event)
         print("当前序列为:", seq, "下一个可能出现event为:", next_event)
+        for event in seq:
+            visited.add(event)
+
+        if set(next_event) == end or set(next_event).issubset(end):
+            print("到达终止位置,结束", end)
+            if len(next_event) > 0:
+                self.add_line(seq, next_event, concurrent)
+            return seq
+
         if not concurrent:
             loop = self.recognize_loop(seq, [])
             if len(loop) != 0:
                 print("当前序列中存在循环结构", loop)
-        if set(next_event) == end or set(next_event).issubset(end):
-            print("到达终止位置,结束", end)
-            return seq
+                self.add_line([loop[0]], [loop[-1]], False)
+
         print("判断分支情况", next_event)
         if len(next_event) >= 2:
             concorrent_group = self.recognize_branch(next_event)
-
         else:
             concorrent_group = [[next_event[0]]]
         print("发现不同的分支", concorrent_group)
+
         for group in concorrent_group:
+            self.add_line(seq, group, concurrent)
             if len(group) >= 2:
                 print("并发执行的分支", group)
                 for i, event in enumerate(group):
                     loop = self.recognize_loop([event], group[:i] + group[i + 1:])
                     if len(loop) != 0:
                         print("发现循环", loop)
-                self.workflow_construction(group, end, True)
+                        self.add_line([event], [event], False)
+                self.workflow_construction(group, end, visited, True)
             else:
-                self.workflow_construction(group, {30})
+                self.workflow_construction(group, {30}, visited)
         return seq
 
-if __name__=='__main__':
-    num_classes = 32
-    num_epochs = 300
-    batch_size = 2048
-    input_size = 1
-    model_dir = 'model'
-    window_size = 10
-    log = 'add_padding_batch_size={}_epoch={}_window_size={}'.format(str(batch_size), str(num_epochs), str(window_size))
-    num_layers = 2
-    hidden_size = 64
-    file_dir = 'data/'
-    model = Model(input_size, hidden_size, num_layers, num_classes).to(device)
-    model.load_state_dict(torch.load(model_dir + '/' + log + '.pt'))
-    model.to(device)
-    model.eval()
+def draw_wf(wf_cons):
+    g = nx.DiGraph()
+    graph = wf_cons.graph
 
-    wf_cons = workflow_constructor(model,1)
-    wf_cons.workflow_construction([0],{30})
+    g.add_nodes_from(list(graph.keys()))
+    pos = {}
+    h = 0
+    for i,key in enumerate(graph.keys()):
+        for j,node in enumerate(list(graph[key])):
+            g.add_edge(key,node)
+    height = {}
+    width = {}
+    shortest_path = dict(nx.all_pairs_shortest_path(g))
+    for key in shortest_path:
+    #     if key=='0':
+    #         height['0']=0
+    #         continue
+        height[key] = len(shortest_path['0'][key])
+        if height[key] not in width:
+            width[height[key]] = 0
+        width[height[key]]+=1
+    width_cur = {i:0 for i in list(width.keys())}
+    for i,key in enumerate(graph.keys()):
+        if key not in pos:
+            pos[key] = (0,height[key])
+        for j,node in enumerate(list(graph[key])):
+            if node not in pos:
+
+                if width[height[node]]%2==0:
+                    pos[node] = (width_cur[height[node]]+0.5-(width[height[node]]/2),height[node])
+                else:
+                    pos[node] = (width_cur[height[node]]-int(width[height[node]]/2),height[node])
+                width_cur[height[node]] += 1
+                print(j,width[height[node]],pos[node])
+    pos['30'] = (0,len(width)+1)
+    # layout = nx.spring_layout(g,  pos=pos)
+    nx.draw(g,pos=pos,with_labels=True)
+    plt.draw()
+    plt.show()
