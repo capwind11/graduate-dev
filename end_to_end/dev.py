@@ -27,12 +27,23 @@ if __name__ == '__main__':
     # build_bert_cache('data/parser/logClusters/logTemplates.txt', 'data/lstm/')
     train_data, test_data, train_x, test_x, train_y, test_y = generate_bert_data('data/lstm/dataset/','data/lstm/bert_cache.pth')
     batch_size = 200
+    model_dir = 'model'
+    version = 'v0.1'
+    model_name = 'supervised_version={}'.format(version)
     train_data = DataLoader(train_data, batch_size=batch_size, shuffle=True)
     test_data = DataLoader(test_data, batch_size=batch_size)
     model = Model(input_size, hidden_size, num_layers, num_classes).to(device)
+
+    if os.path.exists(model_dir + '/' + model_name + '.pt'):
+        model.load_state_dict(torch.load(model_dir + '/' + model_name + '.pt'))
+
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters())
-    train(model,train_data,criterion,optimizer,num_epochs=50,input_size=input_size)
+    train(model,train_data,criterion,optimizer,num_epochs=100,input_size=input_size)
+    
+    if not os.path.isdir(model_dir):
+        os.makedirs(model_dir)
+    torch.save(model.state_dict(), model_dir + '/' + model_name + '.pt')
 
     with torch.no_grad():
         epoch_loss = 0

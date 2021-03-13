@@ -118,7 +118,7 @@ def generate_bert_data(file_dir,bert_cache_path):
     print('Number of sessions({}): {}'.format(file_dir, len(sessions)))
     print('Number of normal sessions: {}'.format(len(normal_data)))
     print('Number of abnormal sessions: {}'.format(len(abnormal_data)))
-    train_x, test_x, train_y, test_y = train_test_split(sessions, labels, test_size=0.3)
+    train_x, test_x, train_y, test_y = train_test_split(sessions, labels, test_size=0.4)
     train_data = TensorDataset(torch.tensor(train_x, dtype=torch.float), torch.tensor(train_y))
     # train_data = DataLoader(train_data, batch_size=batch_size, shuffle=True)
     test_data = TensorDataset(torch.tensor(test_x, dtype=torch.float), torch.tensor(test_y))

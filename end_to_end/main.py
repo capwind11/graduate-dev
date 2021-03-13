@@ -89,7 +89,7 @@ if __name__=='__main__':
 
     model_dir = 'model'
     version = 'v0.1'
-    model_name = 'version={}'.format(version)
+    model_name = 'unsupervised_version={}'.format(version)
 
     model = Model(input_size, hidden_size, num_layers, num_classes).to(device)
     criterion = nn.CrossEntropyLoss(ignore_index=31)
