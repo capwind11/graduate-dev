@@ -6,6 +6,11 @@ from torch.utils.data import TensorDataset, DataLoader,random_split
 from tqdm import tqdm
 from ast import literal_eval
 
+def remove_duplicate(input,col_remove,col_keep,output):
+    data = pd.read_csv(input, engine='c', na_filter=False, memory_map=True)
+    data = data.groupby([col_remove])[col_keep].max()
+    data[[col_keep,col_remove]].to_csv(output)
+
 def split_data(input_dir,output_dir, rate = 0.01):
     count = 0
     with open(input_dir + '/normal.csv', 'r') as f:
@@ -48,22 +53,28 @@ def generate_train_data(name,window_size=10):
     dataset = TensorDataset(torch.tensor(inputs, dtype=torch.float), torch.tensor(outputs))
     return dataset
 
-def generate_test_data(name,window_size=10):
-    hdfs = set()
+def generate_predicted_data(name, window_size=10):
+
+    event_seq_set = set()
     data = pd.read_csv(name, engine='c', na_filter=False, memory_map=True)
     blockId_list= data['BlockId'].tolist()
-    seqs = data['EventSequence'].apply(literal_eval).tolist()
-    for ln in seqs:
-        ln = [0]+ln+[30]
-        ln = ln + [-1] * (window_size + 1 - len(ln))
-        hdfs.add(tuple(ln))
-        # hdfs.append(tuple(ln))
+    event_sequence = data['EventSequence'].apply(literal_eval).tolist()
+    block_to_seq = []
+    for i,line in enumerate(event_sequence):
+        if tuple(line) not in event_seq_set:
+            block_to_seq.append([blockId_list[i],line])
+            event_seq_set.add(tuple(line))
+
     session_to_seq = []
     seqs = []
     labels = []
     seq_count = 0
-    for line in tqdm(hdfs, name):
+    event_seq_set = list(event_seq_set)
+    for line in tqdm(block_to_seq, name):
         session = []
+        line = line[1]
+        line = [0]+list(line)+[30]
+        line = line + [31] * (window_size + 1 - len(line))
         for i in range(len(line) - window_size):
             seq = line[i:i + window_size]
             label = line[i + window_size]
@@ -75,9 +86,9 @@ def generate_test_data(name,window_size=10):
     print('Number of sessions({}): {}'.format(name, len(session_to_seq)))
     print('Number of seqs({}): {}'.format(name, len(seqs)))
     dataset = TensorDataset(torch.tensor(seqs, dtype=torch.float), torch.tensor(labels))
-    return session_to_seq, dataset, seqs,labels
+    return session_to_seq, dataset, block_to_seq
 
-def generate_bert_data(file_dir,bert_cache_path):
+def generate_bert_data(file_dir,normal_file,abnormal_file,bert_cache_path):
     eventId_to_bert = torch.load(bert_cache_path)
     padding = torch.zeros_like(eventId_to_bert[5][1][0])
     eventId_to_bert[0] = [[], [padding]]
@@ -86,14 +97,13 @@ def generate_bert_data(file_dir,bert_cache_path):
     max_len = 50
     normal_data = set()
     abnormal_data = set()
-    data = pd.read_csv('data/lstm/dataset/train.csv', engine='c', na_filter=False, memory_map=True)
-    blockId_list = data['BlockId'].tolist()
+    data = pd.read_csv(file_dir+normal_file, engine='c', na_filter=False, memory_map=True)
     seqs = data['EventSequence'].apply(literal_eval).tolist()
     for line in tqdm(seqs, "loading data"):
         if len(line) > 50:
             continue
         normal_data.add(tuple(line))
-    data = pd.read_csv('data/lstm/dataset/abnormal.csv', engine='c', na_filter=False, memory_map=True)
+    data = pd.read_csv(file_dir+abnormal_file, engine='c', na_filter=False, memory_map=True)
     blockId_list = data['BlockId'].tolist()
     seqs = data['EventSequence'].apply(literal_eval).tolist()
     for line in tqdm(seqs, "loading data"):
@@ -123,4 +133,4 @@ def generate_bert_data(file_dir,bert_cache_path):
     # train_data = DataLoader(train_data, batch_size=batch_size, shuffle=True)
     test_data = TensorDataset(torch.tensor(test_x, dtype=torch.float), torch.tensor(test_y))
     # test_data = DataLoader(test_data, batch_size=batch_size)
-    return train_data, test_data, train_x, test_x, train_y, test_y
+    return train_data, test_data

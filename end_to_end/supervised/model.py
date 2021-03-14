@@ -26,6 +26,7 @@ class Model(nn.Module):
 
 def train(model,dataloader,criterion,optimizer,current_epoch=0,num_epochs=10,input_size=1):
     total_step = len(dataloader)
+    model.train()
     start_time = time.time()
     for epoch in range(current_epoch,current_epoch+num_epochs):  # Loop over the dataset multiple times
         train_loss = 0

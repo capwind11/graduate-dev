@@ -1,5 +1,5 @@
 from utils.bert_utils import *
-from utils.generate_data import *
+from utils.data_utils import *
 from torch.utils.data import DataLoader,random_split
 from supervised.model import *
 import torch
@@ -24,8 +24,8 @@ def accuracy(y_pred, y_true):
     return (np.argmax(y_pred.cpu().numpy(),1) == y_true.numpy()).astype('int').mean()
 
 if __name__ == '__main__':
-    # build_bert_cache('data/parser/logClusters/logTemplates.txt', 'data/lstm/')
-    train_data, test_data, train_x, test_x, train_y, test_y = generate_bert_data('data/lstm/dataset/','data/lstm/bert_cache.pth')
+    # build_bert_cache('data/parser/logClusters/logTemplates.txt', 'data/unsupervised/')
+    train_data, test_data, train_x, test_x, train_y, test_y = generate_bert_data('data/lstm/dataset/','data/unsupervised/bert_cache.pth')
     batch_size = 200
     model_dir = 'model'
     version = 'v0.1'
