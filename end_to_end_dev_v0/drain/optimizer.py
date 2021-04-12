@@ -1,7 +1,6 @@
 # 日志解析器Drain的优化层
 
 from drain.utils import *
-from drain.model import Node,Drain,buildSampleDrain,LogCluster
 import pandas as pd
 
 class Optimizer:
@@ -13,15 +12,16 @@ class Optimizer:
     logparser: 待优化的日志解析器
     st: 相似度阈值，用于判定是否合并
     '''
-    def modify(self, resultFile = '.\\data\\log_item_to_label.csv', method='merge_sub_tree', logparser=None, st = 0.8):
+    def modify(self, resultFile = '.\\data\\log_item_to_label.csv', method='merge_sub_tree', logparser=None, st = 0.8,nst=0.8):
         self.resultFile = resultFile
         self.st = st
+        self.nst = nst
         self.method = method
         self.logparser = logparser
         self.depth = logparser.depth
         if method == 'merge_sub_tree':
-            self.modify_by_merge_subtree(self.logparser.tree)
-        elif method == 'seq_dist' or method == 'tfidf':
+            self.modify_by_merge_subtree(self.logparser.prefixTree)
+        elif method == 'seq_dist' or method == 'tfidf' or method =='LCS':
             self.modify_by_merge_leaf()
 
     '''
@@ -32,12 +32,10 @@ class Optimizer:
 
         res = nodeList[0]
         # 若列表里只有一个成员或已经到了叶节点，那么不用执行合并
-        if len(nodeList) == 1 or len(res.children) == 0:
+        if len(nodeList) == 1:
             return res
-        if isinstance(res.children,list):
-            for node in nodeList[1:]:
-                res.children.extend(node.children)
-            return res
+        for node in nodeList[1:]:
+            res.logClusters.extend(node.logClusters)
         nodeDict = {}
         for node in nodeList:
             for token in node.children.keys():
@@ -75,7 +73,7 @@ class Optimizer:
 
         for i in range(len(nodeList)):
             node = nodeList[i]
-            if isinstance(node.children, list):
+            if len(node.children)==0:#isinstance(node.children, list):
                 res.append([node])
                 continue
             if isWordGrouped[node.token]:
@@ -86,7 +84,8 @@ class Optimizer:
                 newMember = []
                 for member in newGroup:
                     # print(member.token, node1.token)
-                    if not isinstance(node1.children, list) and compareSimilarity(member, node1) > 0.75:
+                    commonNodes = list(set(member.children.keys()).intersection(node1.children.keys()))
+                    if 2*len(commonNodes)/(len(member.children)+len(node1.children))>self.nst:# and compareSimilarity(member, node1) > 0:# not isinstance(node1.children, list) and compareSimilarity(member, node1) > 0.75:
                         newMember.append(node1)
                         isWordGrouped[node1.token] = True
                         break
@@ -98,15 +97,15 @@ class Optimizer:
     def modify_by_merge_subtree(self,node):
 
         childs = node.children
-        if len(childs) == 0:
-            return node
+        logClusters = node.logClusters
 
         # 如果到达叶节点，对因分支合并叶节点下的类别进行合并
-        if isinstance(childs,list):
+        if len(logClusters)>1:
             # 合并叶子节点
-            self.combineLeaves(childs)
-            return node
+            self.combineLeaves(logClusters)
 
+        if len(childs) == 0:
+            return node
         # 对子节点进行聚类操作，将相似的节点
         nodeGroups = self.groupNodes(list(childs.values()))
         # 重新构建当前节点下的子节点
@@ -127,18 +126,21 @@ class Optimizer:
     合并相似的类
     '''
     def mergeCluster(self,clusterList,item_to_class):
+        clusterList = list(set(clusterList))
         res = clusterList[0]
         drainClusters = self.logparser.logClusters
 
         for cluster in clusterList[1:]:
-            drainClusters.remove(cluster)
+            if cluster in drainClusters:
+                drainClusters.remove(cluster)
         for cluster in clusterList[1:]:
             item_to_class['EventId'] = item_to_class['EventId'].replace(cluster.eventId, res.eventId)
             parentNodes = cluster.parentNode
             for parentNode in parentNodes:
-                parentNode.children.remove(cluster)
-                res.parentNode.append(parentNode)
-                parentNode.children.append(res)
+                if cluster in parentNode.logClusters:
+                    parentNode.logClusters.remove(cluster)
+                    res.parentNode.append(parentNode)
+                    parentNode.logClusters.append(res)
 
             res.logIDL.extend(cluster.logIDL)
 
@@ -163,8 +165,14 @@ class Optimizer:
                         sim,_ = SeqDist(member.logTemplate, cluster1.logTemplate)
                     elif self.method=='tfidf':
                         sim = calculate_tfidf_similarity([' '.join(member.logTemplate), ' '.join(cluster1.logTemplate)])
+                    elif self.method=='LCS':
+                        lcs = LCS(member.logTemplate, cluster1.logTemplate)
+                        sim = 2 * len(LCS(member.logTemplate, cluster1.logTemplate)) / (len(member.logTemplate) + len(cluster1.logTemplate))
                     if sim > self.st:
-                        logTemplate = getTemplate(logTemplate,cluster1.logTemplate)
+                        if self.method=='LCS':
+                            logTemplate = getLCSTemplate(lcs,logTemplate)
+                        else:
+                            logTemplate = getTemplate(logTemplate, cluster1.logTemplate)
                         newMember.append(cluster1)
                         isWordGrouped[j] = True
                         break

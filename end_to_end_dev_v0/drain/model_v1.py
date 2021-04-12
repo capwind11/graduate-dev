@@ -22,6 +22,7 @@ class Node:
         if children is None:
             children = dict()
         self.children = children
+        self.logClusters = []
         self.depth = depth
         self.token = token
 
@@ -278,7 +279,11 @@ class Drain:
         seqLen = len(seq)
         parentn = self.prefixTree
         currentDepth = 0
-        for token in seq:
+        for i in range(len(seq)):
+            token = seq[i]
+            while hasNumbers(seq[i]) and i+1 < len(seq) and hasNumbers(seq[i + 1]):
+                i += 1
+                seqLen-=1
             if currentDepth >= self.depth or currentDepth > seqLen:
                 break
 
@@ -290,7 +295,7 @@ class Drain:
                 return retLogClust
             currentDepth += 1
 
-        logClustL = parentn.children
+        logClustL = parentn.logClusters
 
         retLogClust = self.FastMatch(logClustL, seq)
 
@@ -311,16 +316,14 @@ class Drain:
         parentn = firtLayerNode
 
         currentDepth = 0
-        for token in logClust.logTemplate:
+        for i in range(len(logClust.logTemplate)):
 
+            token = logClust.logTemplate[i]
             # Add current log cluster to the leaf node
             # 到尽头了
-            if currentDepth >= self.depth or currentDepth > seqLen:
-                logClust.parentNode.append(parentn)
-                if len(parentn.children) == 0:
-                    parentn.children = [logClust]
-                else:
-                    parentn.children.append(logClust)
+            if currentDepth >= self.depth:
+                # logClust.parentNode.append(parentn)
+                # parentn.logClusters.append(logClust)
                 break
 
             # If token not matched in this layer of existing tree.
@@ -346,6 +349,8 @@ class Drain:
                             parentn = parentn.children['*']
 
                 else:
+                    while i+1<len(logClust.logTemplate) and hasNumbers(logClust.logTemplate[i+1]):
+                        i+=1
                     if '*' not in parentn.children:
                         newNode = Node(depth=currentDepth + 1, token='*')
                         parentn.children['*'] = newNode
@@ -358,12 +363,9 @@ class Drain:
                 parentn = parentn.children[token]
 
             currentDepth += 1
-        if self.depth >= seqLen:
-            logClust.parentNode.append(parentn)
-            if len(parentn.children) == 0:
-                parentn.children = [logClust]
-            else:
-                parentn.children.append(logClust)
+        # if self.depth >= seqLen:
+        logClust.parentNode.append(parentn)
+        parentn.logClusters.append(logClust)
 
     '''
     快速匹配，直接基于相似度来匹配

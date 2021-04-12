@@ -2,7 +2,7 @@
 
 import sys
 sys.path.append('../')
-from drain import model_v1, evaluator
+from drain import model_v1, evaluator,optimizer,Drain
 import os
 import pandas as pd
 
@@ -147,29 +147,107 @@ benchmark_settings = {
         },
 }
 
-bechmark_result = []
-i = 0
-for dataset, setting in benchmark_settings.items():
-    # if i >4:
-    #     break
-    # i+=1
-    print('\n=== Evaluation on %s ==='%dataset)
-    indir = os.path.join(input_dir, os.path.dirname(setting['log_file']))
-    log_file = os.path.basename(setting['log_file'])
-    try:
-        parser = model_v1.Drain(log_format=setting['log_format'], rex=setting['regex'], depth=setting['depth'], st=setting['st'])
-        parser.fit(isReconstruct=True,inputFile=input_dir+setting['log_file'],outputFile=output_dir+log_file + '_structured.csv')
-    except:
-        continue
-    F1_measure, accuracy = evaluator.evaluate(
-                           groundtruth=os.path.join(indir, log_file + '_structured.csv'),
-                           parsedresult=os.path.join(output_dir, log_file + '_structured.csv')
-                           )
-    bechmark_result.append([dataset, F1_measure, accuracy])
+def examine_main():
+
+    bechmark_result = []
+    i = 0
+    for dataset, setting in list(benchmark_settings.items())[8:]:
+        # if i >4:
+        #     break
+        # i+=1
+        print('\n=== Evaluation on %s ==='%dataset)
+        indir = os.path.join(input_dir, os.path.dirname(setting['log_file']))
+        log_file = os.path.basename(setting['log_file'])
+        try:
+            parser = model_v1.Drain(log_format=setting['log_format'], rex=setting['regex'], depth=setting['depth'], st=setting['st'])
+            parser.fit(isReconstruct=True,inputFile=input_dir+setting['log_file'],outputFile=output_dir+log_file + '_structured.csv')
+        except:
+            continue
+        F1_measure, accuracy = evaluator.evaluate(
+                               groundtruth=os.path.join(indir, log_file + '_structured.csv'),
+                               parsedresult=os.path.join(output_dir, log_file + '_structured.csv')
+                               )
+        bechmark_result.append([dataset, F1_measure, accuracy])
 
 
-print('\n=== Overall evaluation results ===')
-df_result = pd.DataFrame(bechmark_result, columns=['Dataset', 'F1_measure', 'Accuracy'])
-df_result.set_index('Dataset', inplace=True)
-print(df_result)
-df_result.T.to_csv('Drain_bechmark_result.csv')
+    print('\n=== Overall evaluation results ===')
+    df_result = pd.DataFrame(bechmark_result, columns=['Dataset', 'F1_measure', 'Accuracy'])
+    df_result.set_index('Dataset', inplace=True)
+    print(df_result)
+    df_result.T.to_csv('Drain_bechmark_result.csv')
+
+def examine_optimize():
+    origin_bechmark_result = []
+    v0_bechmark_result = []
+    v1_bechmark_result = []
+    v2_bechmark_result = []
+    i = 0
+    for dataset, setting in list(benchmark_settings.items()):
+
+        print('\n=== Evaluation on %s ===' % dataset)
+        indir = os.path.join(input_dir, os.path.dirname(setting['log_file']))
+        log_file = os.path.basename(setting['log_file'])
+        try:
+            parser = model_v1.Drain(log_format=setting['log_format'], rex=setting['regex'], depth=setting['depth'] + 1,
+                                    st=setting['st'])
+            parser.fit(isReconstruct=True, inputFile=input_dir + setting['log_file'],
+                       outputFile=output_dir + log_file + '_structured.csv')
+        except:
+            continue
+        opt = optimizer.Optimizer()
+        logClusters = parser.logClusters
+        print('优化前,聚类数: ', len(logClusters), end=' ')
+        F1_measure, accuracy = evaluator.evaluate(
+            groundtruth=os.path.join(indir, log_file + '_structured.csv'),
+            parsedresult=os.path.join(output_dir, log_file + '_structured.csv')
+        )
+        v0_bechmark_result.append([dataset, F1_measure, accuracy])
+        #     printClusters(logClusters)
+        opt.modify(method='merge_sub_tree', resultFile=output_dir + log_file + '_structured.csv', logparser=parser)
+        logClusters = parser.logClusters
+        print('合并子树优化,聚类数: ', len(logClusters), end=' ')
+        F1_measure, accuracy = evaluator.evaluate(
+            groundtruth=os.path.join(indir, log_file + '_structured.csv'),
+            parsedresult=os.path.join(output_dir, log_file + '_structured.csv')
+        )
+        #     printClusters(logClusters)
+        # createPlot(drain)
+        v1_bechmark_result.append([dataset, F1_measure, accuracy])
+        opt.modify(method='LCS', resultFile=output_dir + log_file + '_structured.csv', logparser=parser, st=0.8)
+        logClusters = parser.logClusters
+        print('合并聚类优化,聚类数: ', len(logClusters), end=' ')
+        #     printClusters(logClusters)
+        F1_measure, accuracy = evaluator.evaluate(
+            groundtruth=os.path.join(indir, log_file + '_structured.csv'),
+            parsedresult=os.path.join(output_dir, log_file + '_structured.csv')
+        )
+        v2_bechmark_result.append([dataset, F1_measure, accuracy])
+        parser = Drain.LogParser(log_format=setting['log_format'], indir=indir, outdir=output_dir, rex=setting['regex'],
+                                 depth=setting['depth'], st=setting['st'])
+        parser.parse(log_file)
+        logClusters = parser.logCluL
+        print('原Drain,聚类数: ', len(logClusters), end=' ')
+        F1_measure, accuracy = evaluator.evaluate(
+            groundtruth=os.path.join(indir, log_file + '_structured.csv'),
+            parsedresult=os.path.join(output_dir, log_file + '_structured.csv')
+        )
+        origin_bechmark_result.append([dataset, F1_measure, accuracy])
+        df = pd.read_csv(os.path.join(indir,log_file + '_structured.csv'))
+        print('真实聚类数: ', len(df['EventId'].drop_duplicates()))
+
+    print('\n=== Overall evaluation results ===')
+    df_result = pd.DataFrame(origin_bechmark_result, columns=['Dataset', 'F1_measure', 'Accuracy'])
+    df_result.set_index('Dataset', inplace=True)
+    print(df_result)
+    df_result = pd.DataFrame(v0_bechmark_result, columns=['Dataset', 'F1_measure', 'Accuracy'])
+    df_result.set_index('Dataset', inplace=True)
+    print(df_result)
+    df_result = pd.DataFrame(v1_bechmark_result, columns=['Dataset', 'F1_measure', 'Accuracy'])
+    df_result.set_index('Dataset', inplace=True)
+    print(df_result)
+    df_result = pd.DataFrame(v2_bechmark_result, columns=['Dataset', 'F1_measure', 'Accuracy'])
+    df_result.set_index('Dataset', inplace=True)
+    print(df_result)
+    df_result.T.to_csv('Drain_bechmark_result.csv')
+
+examine_optimize()

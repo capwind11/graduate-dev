@@ -101,3 +101,55 @@ def calculate_tfidf_similarity(corpus):
 def num2word(numList):
 
     return ['a'+num for num in numList]
+
+def getLCSTemplate(lcs, seq):
+    retVal = []
+    if not lcs:
+        return retVal
+
+    lcs = lcs[::-1]
+    i = 0
+    for token in seq:
+        i += 1
+        if token == lcs[-1]:
+            retVal.append(token)
+            lcs.pop()
+        else:
+            retVal.append('<*>')
+        if not lcs:
+            break
+    while i < len(seq):
+        retVal.append('<*>')
+        i += 1
+    return retVal
+
+def LCS(seq1, seq2):
+    lengths = [[0 for j in range(len(seq2)+1)] for i in range(len(seq1)+1)]
+    # row 0 and column 0 are initialized to 0 already
+    for i in range(len(seq1)):
+        for j in range(len(seq2)):
+            if seq1[i] == seq2[j]:
+                lengths[i+1][j+1] = lengths[i][j] + 1
+            else:
+                lengths[i+1][j+1] = max(lengths[i+1][j], lengths[i][j+1])
+
+    # read the substring out from the matrix
+    result = []
+    lenOfSeq1, lenOfSeq2 = len(seq1), len(seq2)
+    while lenOfSeq1!=0 and lenOfSeq2 != 0:
+        if lengths[lenOfSeq1][lenOfSeq2] == lengths[lenOfSeq1-1][lenOfSeq2]:
+            lenOfSeq1 -= 1
+        elif lengths[lenOfSeq1][lenOfSeq2] == lengths[lenOfSeq1][lenOfSeq2-1]:
+            lenOfSeq2 -= 1
+        else:
+            assert seq1[lenOfSeq1-1] == seq2[lenOfSeq2-1]
+            result.append(seq1[lenOfSeq1-1])
+            lenOfSeq1 -= 1
+            lenOfSeq2 -= 1
+    result = result[::-1]
+    return result
+
+def LCSDist(seq1,seq2):
+
+    retVal = 2*len(LCS(seq1, seq2)) / (len(seq1)+len(seq2))
+    return retVal
